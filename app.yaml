@@ -1,0 +1,39 @@
+application: click-tracker-1268
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: yes
+
+handlers:
+- url: /favicon\.ico
+  static_files: favicon.ico
+  upload: favicon\.ico
+
+- url: /api/admin/.*
+  script: admin.app
+
+
+- url: /api/.*
+  script: tracker.app
+  
+## Endpoints handler: Must be /_ah/spi. Apps send requests to /_ah/api, but these are handled at /_ah/spi!!
+- url: /_ah/spi/.*
+  script: main.APPLICATION
+
+# CRON job for storing
+- url: /report/weekly
+  script: reports.app
+  login: admin
+
+libraries:
+- name: webapp2
+  version: "2.5.2"
+- name: pycrypto
+  version: latest
+- name: endpoints
+  version: 1.0
+  
+env_variables:
+  TRACKER_ADMIN_USERNAME: 'tracker'
+  TRACKER_ADMIN_PASSWORD: 'tracker'
+  TRACKER_SHARD_NUMBER: 20
