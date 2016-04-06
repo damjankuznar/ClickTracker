@@ -1,5 +1,0 @@
-# cron.yaml
-cron:
-- description: Store memcached contents to datastore
-  url: /api/admin/store
-  schedule: every 1 mins

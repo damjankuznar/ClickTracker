@@ -296,8 +296,7 @@ app = webapp2.WSGIApplication([
         webapp2.Route(r'/platform/<platform_name>/campaigns', PlatformCampaignsHandler),
         webapp2.Route(r'/platform/<platform_name>/clicks', PlatformClicksHandler),
     ])
-], debug=True)
-# TODO: disable debug
+], debug=False)
 app.error_handlers[405] = handle_error
 app.error_handlers[404] = handle_error
 app.error_handlers[400] = handle_error

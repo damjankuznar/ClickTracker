@@ -1,12 +1,10 @@
 import os
 import time
-
 import webapp2
 from google.appengine.api import memcache, taskqueue
 from google.appengine.api.taskqueue.taskqueue import Task
 from google.appengine.ext import deferred
 from webapp2_extras import routes
-
 from models import Campaign, Platform
 
 PLATFORMS = ("android", "ios", "wp")
@@ -24,9 +22,13 @@ def get_interval_index():
 
 
 class ClickHandler(webapp2.RedirectHandler):
-    # TODO: this should maybe be a POST method
-    # TODO: add more documentation
     def get(self, campaign_id, platform_name):
+        """
+        Handles incoming clicks for given campaign_id and platform_name.
+        If click is valid then user is redirected to url defined in the campaign
+        and statistic about this click is saved. All invalid clicks (e.g. for non
+        existing campaigns, platforms) users are redirected to http://outfit7.com.
+        """
         # cast campaign_id, type checking is done through route definition
         try:
             campaign_id = int(campaign_id)
@@ -52,5 +54,4 @@ app = webapp2.WSGIApplication([
     routes.PathPrefixRoute('/api', [
         webapp2.Route(r'/campaign/<campaign_id>/platform/<platform_name>', ClickHandler),
     ])
-], debug=True)
-# TODO: disable debug
+], debug=False)
