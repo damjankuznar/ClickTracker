@@ -89,7 +89,7 @@ Update the existing campaign. Data must be provided the same way as for the crea
 #### DELETE `/campaign/<campaign_id>`
 Delete the existing campaign.
 
-#### GET `/campaign/<campaign_id:>/platform/<platform_name>`
+#### GET `/campaign/<campaign_id>/platform/<platform_name>`
 Retrieves the number of clicks for given campaign on the given platform.
 
 #### GET `/platform/<platform_name>/campaigns`
