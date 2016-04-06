@@ -7,10 +7,10 @@ to appropriate links.
 
 ## Running locally
 To run the backend locally you must first install the Google App Engine SDK for
-Python. The the official instructions [here](https://cloud.google.com/appengine/downloads#Google_App_Engine_SDK_for_Python).
+Python. See the official installation instructions [here](https://cloud.google.com/appengine/downloads#Google_App_Engine_SDK_for_Python).
 The you can run the backend using the following command:
 ```bash
-cd <path_to_backend_folder>
+cd <path_to_project_folder>
 /usr/bin/python2.7 <path_to_gae_sdk>/dev_appserver.py --host localhost .
 ```
 Here is a list of few backend API calls using `curl`. For complete reference see
@@ -30,11 +30,24 @@ curl -X GET -v -H "Authorization: Basic dHJhY2tlcjp0cmFja2Vy" \
 -H "Content-type: application/json" \ http://localhost:8080/api/admin/campaign/6323566249246720
 ```
 
-## Tests
+## Deploying to Google App Engine
+Deployment to Google App Engine is performed using the `appcfg.py` script that
+is provided with the SDK. To deploy it, use the following command:
+```bash
+cd <path_to_project_folder>
+/usr/bin/python2.7 <path_to_gae_sdk>/appcfg.py -A <YOUR_PROJECT_ID> update app.yaml
+/usr/bin/python2.7 <path_to_gae_sdk>/appcfg.py -A <YOUR_PROJECT_ID> update_indexes .
+```
+You need to provide your project id that you can obtain from the [Google Cloud
+Platform Console](https://console.cloud.google.com/).
+
+Demo backend deployment is available here: http://click-tracker-1268.appspot.com
+
+## Running tests
 Unit tests are provided with the project. Make sure you have a Python package `webtest` installed. You can install it by running `sudo pip install webtest`.
 To run the tests simply invoke the supplied script:
 ```bash
-cd <path_to_backend_folder>
+cd <path_to_project_folder>
 /usr/bin/python2.7 test_runner.py <path_to_gae_sdk> .
 ```
 
