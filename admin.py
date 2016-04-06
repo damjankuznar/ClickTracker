@@ -2,11 +2,9 @@ import base64
 from datetime import datetime
 import json
 import os
-
 import webapp2
 from webapp2_extras import routes
 from google.appengine.ext import ndb
-
 from models import Campaign, Platform
 
 __author__ = 'damjan'
@@ -24,14 +22,6 @@ class TrackerException(Exception):
         self.status_code = status_code
 
 
-# TODO: remove
-class StatsHandler(webapp2.RequestHandler):
-    def get(self):
-        self.response.write("\n".join(str(c) for c in Campaign.query().fetch(100)))
-        self.response.write("\n\n")
-        self.response.write("\n".join(str(c) for c in Platform.query().fetch(100)))
-
-
 def handle_error(request, response, exception):
     """Overriding webapp2 default HTTP error output by returning JSON content type by default.
     :param request: Request instance.
@@ -43,8 +33,6 @@ def handle_error(request, response, exception):
         'error': exception.explanation,
     }
     response.write(json.dumps(result))
-    # TODO: remove
-    response.write("\n")
     response.set_status(exception.code)
 
 
@@ -62,9 +50,12 @@ class AdminHandler(webapp2.RequestHandler):
         checking and caches any TrackerException during the dispatch and convert it into meaninful response."""
         self.response.headers['Content-Type'] = 'application/json'
         try:
-            # TODO: enable auth
-            # self.check_auth()
+            self.check_auth()
             output = super(AdminHandler, self).dispatch()
+            if self.response.status_int == 204:
+                # if status code is 204, then no content should be returned
+                self.response.content_type = None
+                self.response.clear()
             if isinstance(output, basestring):
                 self.response.write(output)
             elif output is not None:
@@ -72,8 +63,6 @@ class AdminHandler(webapp2.RequestHandler):
         except TrackerException, e:
             self.response.status_int = e.status_code
             self.response.write(json.dumps({"error": e.message}, default=json_serial, sort_keys=True))
-        # TODO: remove this
-        self.response.write("\n")
 
     def check_auth(self):
         basic_auth = self.request.headers.get('Authorization')
@@ -93,7 +82,6 @@ class AdminHandler(webapp2.RequestHandler):
     def get_request_json(self):
         """Gets JSON from request or raises TrackerException if JSON invalid."""
         try:
-            print self.request.body
             campaign_dict = json.loads(self.request.body)
         except:
             raise TrackerException("Could not get a valid JSON from request. Please send request as JSON encoded data "
@@ -101,16 +89,39 @@ class AdminHandler(webapp2.RequestHandler):
         return campaign_dict
 
 
+def validate_campaign_dict(campaign_dict, all_required=True):
+    valid_keys = {"name", "link", "platforms"}
+    errors = []
+    dict_keys = set(campaign_dict.keys())
+    if all_required:
+        # get a list of missing keys
+        for missing_key in valid_keys.difference(dict_keys):
+            errors.append("Missing parameter '%s'." % missing_key)
+    # get a list of invalid keys
+    for invalid_key in dict_keys.difference(valid_keys):
+        errors.append("Invalid parameter '%s'." % invalid_key)
+
+    # check if platforms are valid
+    if "platforms" in campaign_dict:
+        if isinstance(campaign_dict["platforms"], list):
+            for invalid_platform in set(campaign_dict["platforms"]).difference(set(PLATFORMS)):
+                errors.append("Platforms parameter contains invalid platform '%s'." % invalid_platform)
+        else:
+            errors.append("Platforms parameter must be a list of platform names.")
+    # raise exception if any errors were detected
+    if errors:
+        raise TrackerException("Invalid request. %s" % " ".join(errors), status_code=400)
+
+
 class CampaignCollectionHandler(AdminHandler):
     def get(self):
         """List all existing campaigns."""
         return [campaign_to_dict(campaign) for campaign in Campaign.query()]
 
-    # TODO: test for malformed inputs
     def post(self):
         """Create a new campaign."""
         campaign_dict = self.get_request_json()
-        campaign_dict["id"] if "id" in campaign_dict else None
+        validate_campaign_dict(campaign_dict)
         # get a list of platforms
         platforms_list = campaign_dict["platforms"]
         del campaign_dict["platforms"]
@@ -121,19 +132,12 @@ class CampaignCollectionHandler(AdminHandler):
         # construct and store platforms for campaign
         platforms = []
         for platform_name in platforms_list:
-            for shard_number in range(Platform.number_of_shards):
-                platform = Platform(name=platform_name, counter=0, campaign=campaign.key,
-                                    group_id="%d-%s" % (campaign_id, platform_name),
-                                    id="%d-%s-%d" % (campaign_id, platform_name, shard_number))
-                platform.put()
-                # generate dict representation of platform for response
-                platform = platform.to_dict()
-                del platform["campaign"]
-                platforms.append(platform)
-        # prepare response representation of the created campaing
-        output = campaign.to_dict()
-        output["platforms"] = platforms
-        output["id"] = campaign_id
+            platform = Platform(name=platform_name, counter=0, campaign=campaign.key,
+                                id="%d-%s" % (campaign_id, platform_name))
+            platform.put()
+            platforms.append(platform)
+        # prepare response representation of the created campaign
+        output = campaign_to_dict(campaign, platforms=platforms)
         # set the appropriate response headers
         self.response.headers["Location"] = self.uri_for("campaign-detail", campaign_id=campaign_id)
         self.response.status_int = 201
@@ -146,13 +150,7 @@ class CampaignHandler(AdminHandler):
         campaign_id = int(campaign_id)
         campaign = Campaign.get_by_id(campaign_id)
         if campaign:
-            output = campaign.to_dict()
-            query = Platform.query(Platform.campaign == campaign.key)
-            platforms = [platform.to_dict() for platform in
-                         query.fetch(3, projection=[Platform.name, Platform.counter])]
-            output["id"] = campaign.key.id()
-            output["platforms"] = platforms
-            return output
+            return campaign_to_dict(campaign)
         else:
             raise TrackerException("Campaign with id %s does not exist." % campaign_id, status_code=204)
 
@@ -162,20 +160,20 @@ class CampaignHandler(AdminHandler):
         campaign = Campaign.get_by_id(campaign_id)
 
         if campaign:
-            # detele the campaign first, so that updates are not possible
+            # delete the campaign first, so that updates are not possible
             campaign.key.delete()
             # delete all platforms that correspond to the campaign
             [platform.key.delete() for platform in Platform.query(Platform.campaign == campaign.key).fetch(3)]
         else:
-            # TODO: report error or just set to response 204 (No Content)
+            # the campaign does not exist, just send 204
             self.response.status_int = 204
-            raise TrackerException("Campaign with id %s does not exist." % campaign_id, status_code=204)
 
     def put(self, campaign_id):
         """Update the existing campaign."""
         campaign_id = int(campaign_id)
         campaign_dict = self.get_request_json()
-        campaign_dict["id"] if "id" in campaign_dict else None
+        validate_campaign_dict(campaign_dict, all_required=False)
+
         campaign = Campaign.get_by_id(campaign_id)
 
         platforms = []
@@ -189,24 +187,18 @@ class CampaignHandler(AdminHandler):
             # get a list of platforms from the request
             platforms_list = campaign_dict["platforms"]
             del campaign_dict["platforms"]
-            # construct and store platforms for campaign
+            # construct platforms for campaign
             for platform_name in platforms_list:
                 if platform_name not in existing_platforms_list:
                     platform = Platform(name=platform_name, counter=0, campaign=campaign.key,
                                         id="%d-%s" % (campaign_id, platform_name))
-                    # platform.put()
                     platforms_to_store.append(platform)
                 else:
                     platform = existing_platforms_list[platform_name]
-                # generate dict representation of platform for response
-                platform = platform.to_dict()
-                del platform["campaign"]
                 platforms.append(platform)
         else:
             # no changes to platforms field, just copy
             for platform in existing_platforms_list.values():
-                platform = platform.to_dict()
-                del platform["campaign"]
                 platforms.append(platform)
 
         # update the rest of the fields
@@ -222,10 +214,7 @@ class CampaignHandler(AdminHandler):
 
         _update()
 
-        # TODO: make a function to serialize the campaign and platforms into output
-        output = campaign.to_dict()
-        output["platforms"] = platforms
-        output["id"] = campaign_id
+        output = campaign_to_dict(campaign, platforms=platforms)
         return output
 
 
@@ -267,12 +256,10 @@ def campaign_to_dict(campaign, platforms=None, fetch_platforms=True):
     output = campaign.to_dict()
     output["id"] = campaign.key.id()
     if platforms is None and fetch_platforms:
-        platforms = [platform for platform in
-                     Platform.query(Platform.campaign == campaign.key, 
-                                    projection=[Platform.name, Platform.counter])]
-        
-
-    output["platforms"] = [platform_to_dict(platform) for platform in platforms]
+        platforms = Platform.query(Platform.campaign == campaign.key,
+                                   projection=[Platform.name, Platform.counter])
+        # print [p for p in Platform.query().fetch(3)]
+    output["platform_counters"] = {platform.name: platform.counter for platform in platforms}
     return output
 
 
@@ -301,10 +288,8 @@ class PlatformClicksHandler(AdminHandler):
         return clicks_sum
 
 
-# TODO: add gzip middleware
 app = webapp2.WSGIApplication([
     routes.PathPrefixRoute('/api/admin', [
-        webapp2.Route(r'/stats', StatsHandler),
         webapp2.Route(r'/campaign', CampaignCollectionHandler),
         webapp2.Route(r'/campaign/<campaign_id:\d+>/platform/<platform_name>', CampaignClicksHandler),
         webapp2.Route(r'/campaign/<campaign_id:\d+>', CampaignHandler, name="campaign-detail"),
@@ -313,7 +298,7 @@ app = webapp2.WSGIApplication([
     ])
 ], debug=True)
 # TODO: disable debug
-# TODO: more auth credential into configuraion file
 app.error_handlers[405] = handle_error
 app.error_handlers[404] = handle_error
 app.error_handlers[400] = handle_error
+app.error_handlers[500] = handle_error

@@ -4,6 +4,9 @@ runtime: python27
 api_version: 1
 threadsafe: yes
 
+builtins:
+- deferred: on
+
 handlers:
 - url: /favicon\.ico
   static_files: favicon.ico
@@ -24,6 +27,10 @@ handlers:
 - url: /report/weekly
   script: reports.app
   login: admin
+  
+- url: /_ah/queue/deferred
+  script: google.appengine.ext.deferred.deferred.application
+  login: admin
 
 libraries:
 - name: webapp2
@@ -36,4 +43,4 @@ libraries:
 env_variables:
   TRACKER_ADMIN_USERNAME: 'tracker'
   TRACKER_ADMIN_PASSWORD: 'tracker'
-  TRACKER_SHARD_NUMBER: 20
+  TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH: 10

@@ -1,20 +1,31 @@
-from google.appengine.ext import ndb
+import os
+import time
 
 import webapp2
+from google.appengine.api import memcache, taskqueue
+from google.appengine.api.taskqueue.taskqueue import Task
+from google.appengine.ext import deferred
 from webapp2_extras import routes
 
 from models import Campaign, Platform
 
-__author__ = 'damjan'
-__version__ = (1, 0)
-
 PLATFORMS = ("android", "ios", "wp")
+try:
+    TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH = int(os.environ.get("TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH", 1))
+except:
+    TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH = 1
+
+
+def get_interval_index():
+    """Get the index of the interval from the UNIX epoch time. Interval length is defined by the
+    TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH.
+    """
+    return int(time.time() / TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH)
 
 
 class ClickHandler(webapp2.RedirectHandler):
     # TODO: this should maybe be a POST method
-    # TODO: restrict not needed HTTP methods
-    # TODO: implement memcached caching
+    # TODO: add more documentation
     def get(self, campaign_id, platform_name):
         # cast campaign_id, type checking is done through route definition
         try:
@@ -22,17 +33,15 @@ class ClickHandler(webapp2.RedirectHandler):
         except ValueError:
             return webapp2.redirect("http://outfit7.com", permanent=True)
 
-        @ndb.transactional()
-        def __increment():
-            platform = Platform.get_by_id("%d-%s-%d" % (campaign_id, platform_name, Platform.get_random_shard_number()))
-            if platform:
-                platform.counter += 1
-                platform.put()
-                return True
-            else:
-                return False
-
-        if __increment():
+        platform_id = "%d-%s" % (campaign_id, platform_name)
+        platform = Platform.get_by_id(platform_id)
+        if platform:
+            memcache.incr(platform_id, 1, namespace="counters", initial_value=0)
+            try:
+                deferred.defer(Platform.increment, platform_id, _countdown=TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH,
+                               _name="%s-%d" % (platform_id, get_interval_index()))
+            except (taskqueue.TaskAlreadyExistsError, taskqueue.TombstonedTaskError), e:
+                pass
             campaign = Campaign.get_by_id(campaign_id)
             return webapp2.redirect(campaign.link.encode("utf8"))
         else:
@@ -41,6 +50,7 @@ class ClickHandler(webapp2.RedirectHandler):
 
 app = webapp2.WSGIApplication([
     routes.PathPrefixRoute('/api', [
-        webapp2.Route(r'/campaign/<campaign_id:\d+>/platform/<platform_name>', ClickHandler),
+        webapp2.Route(r'/campaign/<campaign_id>/platform/<platform_name>', ClickHandler),
     ])
 ], debug=True)
+# TODO: disable debug
