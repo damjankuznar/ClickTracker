@@ -100,6 +100,6 @@ Retrieve the number of clicks on the given platform.
 
 ## Assumptions
 To circumvent the Google App Engine Datastore limits on the number of updates to
-entites (limit of 1 update per second) memcache was employed to temporarily
+entites (limit of 1 update per second) [memcache](https://cloud.google.com/appengine/articles/scaling/memcache) was employed to temporarily
 store the counter delta values (number of clicks since the last update to the Datastore) and stored into the Datastore at predefined intervals (every platform counter is permanently updated on every *N* seconds, where *N* is configurable through the environment variable `TRACKER_COUNTER_UPDATE_INTERVAL_LENGTH`, see `app.yaml`).
-The assumption is that occasional loss (due to memcache) of *N* seconds worth of clicks is not critical. Memcache also incurs *N* seconds of delay to the click statistics. However, memcache has some benefits over implementation using sharded counters, such as the cost of read/write operations and speed.
+The assumption is that occasional loss (due to memcache) of *N* seconds worth of clicks is not critical. Memcache also incurs *N* seconds of delay to the click statistics. However, memcache has some benefits over implementation using [sharded counters](https://cloud.google.com/appengine/articles/sharding_counters), such as the cost of read/write operations and speed.
