@@ -1,7 +1,8 @@
 language: python
 python:
   - "2.7"
-install: "pip install webtest"
+install: 
+  - pip install webtest coverage python-coveralls
 before_script:
   - wget https://storage.googleapis.com/appengine-sdks/featured/google_appengine_1.9.35.zip -nv
   - unzip -q google_appengine_1.9.35.zip

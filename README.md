@@ -1,6 +1,7 @@
 Click Tracker API
 =========
 [![Build Status](https://travis-ci.org/damjankuznar/ClickTracker.svg?branch=master)](https://travis-ci.org/damjankuznar/ClickTracker)
+[![Coverage Status](https://coveralls.io/repos/github/damjankuznar/ClickTracker/badge.svg?branch=master)](https://coveralls.io/github/damjankuznar/ClickTracker?branch=master)
 
 REST API backend for tracking user campaign clicks and redirecting them
 to appropriate links.
