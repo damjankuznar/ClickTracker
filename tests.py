@@ -10,7 +10,6 @@ import webtest
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import testbed
 from google.appengine.ext.deferred import deferred
-
 from admin import app as admin_app
 from tracker import app as tracker_app
 
@@ -161,7 +160,7 @@ class TrackerTest(unittest.TestCase):
         campaign_new["name"] = "new name"
         response = self.admin_app.put(campaign_url, params=json.dumps(self.CAMPAIGN_SAMPLE),
                                       headers=self.ADMIN_HEADERS)
-        
+
         campaign_updated = json.loads(response.body)
         # check if update resets counter (it should not)
         self.assertEqual(campaign_updated["platform_counters"]["android"], 1)
@@ -229,6 +228,7 @@ class TrackerTest(unittest.TestCase):
             campaign = json.loads(response.body)
             campaign_ids.append(campaign["id"])
 
+        # get the campaigns count for android platform
         response = self.admin_app.get("/api/admin/platform/android/campaigns", headers=self.ADMIN_HEADERS)
         results = json.loads(response.body)
         self.assertEqual(len(results), 10)
@@ -239,11 +239,16 @@ class TrackerTest(unittest.TestCase):
                                        headers=self.ADMIN_HEADERS)
         campaign = json.loads(response.body)
         campaign_id = campaign["id"]
-
+        
         # delete the campaign
         response = self.admin_app.delete("/api/admin/campaign/%d" % campaign_id, headers=self.ADMIN_HEADERS)
         self.assertEqual(response.status_int, 200)
 
+        # check if the campaign was really deleted
+        response = self.admin_app.get("/api/admin/campaign", headers=self.ADMIN_HEADERS)
+        campaigns = json.loads(response.body)
+        self.assertEqual(len(campaigns), 0)
+        
         # delete non-existent campaign
         response = self.admin_app.delete("/api/admin/campaign/999", headers=self.ADMIN_HEADERS, expect_errors=True)
         self.assertEqual(response.status_int, 204)

@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os
 import webapp2
+from google.appengine.ext.ndb.tasklets import Future
 from webapp2_extras import routes
 from google.appengine.ext import ndb
 from models import Campaign, Platform
@@ -30,10 +31,11 @@ def handle_error(request, response, exception):
     """
     response.headers.add_header('Content-Type', 'application/json')
     result = {
-        'error': exception.explanation,
+        'error': str(exception)  # .explanation,
     }
     response.write(json.dumps(result))
-    response.set_status(exception.code)
+    if hasattr(exception, "code"):
+        response.set_status(exception.code)
 
 
 def json_serial(obj):
@@ -118,6 +120,7 @@ class CampaignCollectionHandler(AdminHandler):
         """List all existing campaigns."""
         return [campaign_to_dict(campaign) for campaign in Campaign.query()]
 
+    @ndb.toplevel
     def post(self):
         """Create a new campaign."""
         campaign_dict = self.get_request_json()
@@ -160,10 +163,13 @@ class CampaignHandler(AdminHandler):
         campaign = Campaign.get_by_id(campaign_id)
 
         if campaign:
+            futures = []
             # delete the campaign first, so that updates are not possible
-            campaign.key.delete()
+            futures.append(campaign.key.delete_async())
             # delete all platforms that correspond to the campaign
-            [platform.key.delete() for platform in Platform.query(Platform.campaign == campaign.key).fetch(3)]
+            futures.extend(ndb.delete_multi_async([platform.key for platform in
+                                                   Platform.query(Platform.campaign == campaign.key).fetch(3)]))
+            Future.wait_all(futures)
         else:
             # the campaign does not exist, just send 204
             self.response.status_int = 204
@@ -171,10 +177,11 @@ class CampaignHandler(AdminHandler):
     def put(self, campaign_id):
         """Update the existing campaign."""
         campaign_id = int(campaign_id)
+        future = Campaign.get_by_id_async(campaign_id)
         campaign_dict = self.get_request_json()
         validate_campaign_dict(campaign_dict, all_required=False)
 
-        campaign = Campaign.get_by_id(campaign_id)
+        campaign = future.get_result()
 
         platforms = []
         # get a list of existing campaign platforms
@@ -206,15 +213,18 @@ class CampaignHandler(AdminHandler):
             setattr(campaign, field_name, campaign_dict[field_name])
         campaign.update_date = datetime.now()
 
-        @ndb.transactional(xg=True)
+        @ndb.transactional_async(xg=True)
         def _update():
             """Do the update in transaction"""
-            ndb.put_multi(platforms_to_store)
-            campaign.put()
+            ndb.put_multi_async(platforms_to_store)
+            campaign.put_async()
 
-        _update()
+        future = _update()
 
         output = campaign_to_dict(campaign, platforms=platforms)
+        # explicitly do the json conversion here, while we may be waiting for the _update to finish
+        output = json.dumps(output, default=json_serial, sort_keys=True)
+        future.get_result()
         return output
 
 
@@ -301,5 +311,3 @@ app.error_handlers[405] = handle_error
 app.error_handlers[404] = handle_error
 app.error_handlers[400] = handle_error
 app.error_handlers[500] = handle_error
-
-app = ndb.toplevel(app)
