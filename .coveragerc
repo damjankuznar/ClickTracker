@@ -1,0 +1,7 @@
+[report]
+omit =  
+    */python?.?/*
+    *__init__*
+    *google_appengine/*
+    test_runner.py
+    tests.py
