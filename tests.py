@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import base64
 import json
 import os
 import random
@@ -60,6 +61,35 @@ class TrackerTest(unittest.TestCase):
         self._check_if_default_redirect(response)
         response = self.tracker_app.get('/api/campaign/sad/platform/orei')
         self._check_if_default_redirect(response)
+
+        response = self.tracker_app.get('/api/ščš34/24723', expect_errors=True)
+        self.assertEqual(response.status_int, 404)
+
+        response = self.admin_app.get("/api/admin/campaign/123", headers=self.ADMIN_HEADERS, expect_errors=True)
+        self.assertEqual(response.status_int, 404)
+
+    def test_invalid_auth(self):
+        response = self.admin_app.get('/api/admin/campaign', expect_errors=True)
+        self.assertEqual(response.status_int, 401)
+
+        headers = deepcopy(self.ADMIN_HEADERS)
+        headers["Authorization"] = "Basic %s" % base64.encodestring("foo:bar")
+        response = self.admin_app.get('/api/admin/campaign', expect_errors=True, headers=headers)
+        self.assertEqual(response.status_int, 401)
+
+        headers = deepcopy(self.ADMIN_HEADERS)
+        headers["Authorization"] = "Basic foobar"
+        response = self.admin_app.get('/api/admin/campaign', expect_errors=True, headers=headers)
+        self.assertEqual(response.status_int, 400)
+
+    def test_invalid_json(self):
+        # make a corrupt json
+        json_string = json.dumps(self.CAMPAIGN_SAMPLE)
+        json_string = json_string[:-5]
+        response = self.admin_app.post("/api/admin/campaign", params=json_string,
+                                       headers=self.ADMIN_HEADERS, expect_errors=True)
+        self.assertEqual(response.status_int, 400)
+        # self.assertIn("Location", response.headers)
 
     def test_illegal_http_method(self):
         response = self.tracker_app.post('/api/campaign/1/platform/android', expect_errors=True)

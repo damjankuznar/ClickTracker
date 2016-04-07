@@ -16,7 +16,7 @@ cd <path_to_project_folder>
 /usr/bin/python2.7 <path_to_gae_sdk>/dev_appserver.py --host localhost .
 ```
 Here is a list of few backend API calls using `curl`. For complete reference see
-the __API reference__ section
+the __API reference__ section.
 ```bash
 echo "create a campaign"
 curl -X POST -v -H "Authorization: Basic dHJhY2tlcjp0cmFja2Vy" \

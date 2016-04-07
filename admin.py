@@ -170,7 +170,7 @@ class CampaignHandler(AdminHandler):
         if campaign:
             return campaign_to_dict(campaign)
         else:
-            raise TrackerException("Campaign with id %s does not exist." % campaign_id, status_code=204)
+            raise TrackerException("Campaign with id %s does not exist." % campaign_id, status_code=404)
 
     def delete(self, campaign_id):
         """Delete the existing campaign."""
