@@ -319,16 +319,13 @@ class CampaignClicksHandler(AdminHandler):
 class PlatformClicksHandler(AdminHandler):
     def get(self, platform_name):
         """Retrieve the number of clicks on the given platform."""
-        clicks_sum = sum([platform.counter for platform in
-                          Platform.query(Platform.name == platform_name, projection=[Platform.counter])])
 
         @ndb.tasklet
         def callback(platform):
-            campaign, platforms = yield platform.campaign.get_async(), \
-                                        Platform.query(Platform.campaign == platform.campaign,
-                                                       projection=[Platform.name, Platform.counter]).order(
-                                            Platform.name).fetch_async(3)
-            raise ndb.Return(campaign_to_dict(campaign, platforms=platforms))
+            raise ndb.Return(platform.counter)
+        
+        query = Platform.query(Platform.name == platform_name, projection=[Platform.counter])
+        clicks_sum = sum(query.map(callback))
 
         return clicks_sum
 
@@ -345,4 +342,4 @@ app = webapp2.WSGIApplication([
 app.error_handlers[405] = handle_error
 app.error_handlers[404] = handle_error
 app.error_handlers[400] = handle_error
-# app.error_handlers[500] = handle_error
+app.error_handlers[500] = handle_error

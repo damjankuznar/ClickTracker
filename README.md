@@ -1,6 +1,7 @@
 Click Tracker API
 =========
 [![Build Status](https://travis-ci.org/damjankuznar/ClickTracker.svg?branch=master)](https://travis-ci.org/damjankuznar/ClickTracker)
+
 REST API backend for tracking user campaign clicks and redirecting them
 to appropriate links.
 
