@@ -13,9 +13,9 @@ indexes:
 - kind: Platform
   properties:
   - name: campaign
-  - name: counter
   - name: name
-
+  - name: counter
+  
 - kind: Platform
   properties:
   - name: name

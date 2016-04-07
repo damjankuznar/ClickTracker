@@ -29,13 +29,15 @@ def handle_error(request, response, exception):
     :param response: Response instance.
     :param exception: Exception instance to be handled.
     """
-    response.headers.add_header('Content-Type', 'application/json')
+    response.content_type = 'application/json'
     result = {
-        'error': str(exception)  # .explanation,
+        'error': str(exception)
     }
     response.write(json.dumps(result))
     if hasattr(exception, "code"):
         response.set_status(exception.code)
+    else:
+        response.set_status(500)
 
 
 def json_serial(obj):
@@ -50,7 +52,7 @@ class AdminHandler(webapp2.RequestHandler):
     def dispatch(self):
         """Overrides default dispatch by setting the default HTTP Content-type to JSON, performs user authorization
         checking and caches any TrackerException during the dispatch and convert it into meaninful response."""
-        self.response.headers['Content-Type'] = 'application/json'
+        self.response.content_type = 'application/json'
         try:
             self.check_auth()
             output = super(AdminHandler, self).dispatch()
@@ -74,9 +76,9 @@ class AdminHandler(webapp2.RequestHandler):
         try:
             user_info = base64.decodestring(basic_auth[6:])
             username, password = user_info.split(':')
-            # check username and password
         except Exception, e:
             raise TrackerException("Could not parse HTTP Authorization.", status_code=400)
+        # check username and password
         if not (username == os.environ.get("TRACKER_ADMIN_USERNAME", None) and
                         password == os.environ.get("TRACKER_ADMIN_PASSWORD", None)):
             raise TrackerException("Invalid authorization credentials.", status_code=401)
@@ -118,7 +120,17 @@ def validate_campaign_dict(campaign_dict, all_required=True):
 class CampaignCollectionHandler(AdminHandler):
     def get(self):
         """List all existing campaigns."""
-        return [campaign_to_dict(campaign) for campaign in Campaign.query()]
+
+        @ndb.tasklet
+        def callback(campaign):
+            platforms = yield Platform.query(Platform.campaign == campaign.key,
+                                             projection=[Platform.name, Platform.counter]).order(
+                Platform.name).fetch_async(3)
+            raise ndb.Return(campaign_to_dict(campaign, platforms=platforms))
+
+        query = Campaign.query()
+        output = query.map(callback)
+        return output
 
     @ndb.toplevel
     def post(self):
@@ -142,14 +154,17 @@ class CampaignCollectionHandler(AdminHandler):
         # prepare response representation of the created campaign
         output = campaign_to_dict(campaign, platforms=platforms)
         # set the appropriate response headers
-        self.response.headers["Location"] = self.uri_for("campaign-detail", campaign_id=campaign_id)
+        self.response.location = self.uri_for("campaign-detail", campaign_id=campaign_id)
         self.response.status_int = 201
         return output
 
 
 class CampaignHandler(AdminHandler):
     def get(self, campaign_id):
-        """Display information about the existing campaign."""
+        """
+        Display information about the existing campaign.
+        :param campaign_id: ID of the campaign.
+        """
         campaign_id = int(campaign_id)
         campaign = Campaign.get_by_id(campaign_id)
         if campaign:
@@ -163,9 +178,8 @@ class CampaignHandler(AdminHandler):
         campaign = Campaign.get_by_id(campaign_id)
 
         if campaign:
-            futures = []
             # delete the campaign first, so that updates are not possible
-            futures.append(campaign.key.delete_async())
+            futures = [campaign.key.delete_async()]
             # delete all platforms that correspond to the campaign
             futures.extend(ndb.delete_multi_async([platform.key for platform in
                                                    Platform.query(Platform.campaign == campaign.key).fetch(3)]))
@@ -263,22 +277,34 @@ def campaign_to_dict(campaign, platforms=None, fetch_platforms=True):
     :param fetch_platforms: Boolean indicating whether to fetch platforms data from the Datastore.
     :return: Dictionary
     """
+    fetch_platforms = fetch_platforms and platforms is None
     output = campaign.to_dict()
+
+    if fetch_platforms:
+        query = Platform.query(Platform.campaign == campaign.key,
+                               projection=[Platform.name, Platform.counter]).order(Platform.name).fetch(3)
+        output["platform_counters"] = {platform.name: platform.counter for platform in query}
+    elif platforms is not None:
+        output["platform_counters"] = {platform.name: platform.counter for platform in platforms}
     output["id"] = campaign.key.id()
-    if platforms is None and fetch_platforms:
-        platforms = Platform.query(Platform.campaign == campaign.key,
-                                   projection=[Platform.name, Platform.counter])
-        # print [p for p in Platform.query().fetch(3)]
-    output["platform_counters"] = {platform.name: platform.counter for platform in platforms}
+
     return output
 
 
 class PlatformCampaignsHandler(AdminHandler):
     def get(self, platform_name):
         """List all existing campaigns available on a given platform."""
-        campaigns = [platform.campaign.get() for platform in
-                     Platform.query(Platform.name == platform_name, projection=[Platform.campaign])]
-        output = [campaign_to_dict(campaign) for campaign in campaigns]
+
+        @ndb.tasklet
+        def callback(platform):
+            campaign, platforms = yield platform.campaign.get_async(), \
+                                        Platform.query(Platform.campaign == platform.campaign,
+                                                       projection=[Platform.name, Platform.counter]).order(
+                                            Platform.name).fetch_async(3)
+            raise ndb.Return(campaign_to_dict(campaign, platforms=platforms))
+
+        query = Platform.query(Platform.name == platform_name, projection=[Platform.campaign])
+        output = query.map(callback)
         return output
 
 
@@ -295,6 +321,15 @@ class PlatformClicksHandler(AdminHandler):
         """Retrieve the number of clicks on the given platform."""
         clicks_sum = sum([platform.counter for platform in
                           Platform.query(Platform.name == platform_name, projection=[Platform.counter])])
+
+        @ndb.tasklet
+        def callback(platform):
+            campaign, platforms = yield platform.campaign.get_async(), \
+                                        Platform.query(Platform.campaign == platform.campaign,
+                                                       projection=[Platform.name, Platform.counter]).order(
+                                            Platform.name).fetch_async(3)
+            raise ndb.Return(campaign_to_dict(campaign, platforms=platforms))
+
         return clicks_sum
 
 
@@ -310,4 +345,4 @@ app = webapp2.WSGIApplication([
 app.error_handlers[405] = handle_error
 app.error_handlers[404] = handle_error
 app.error_handlers[400] = handle_error
-app.error_handlers[500] = handle_error
+# app.error_handlers[500] = handle_error

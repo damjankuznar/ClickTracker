@@ -15,18 +15,8 @@ handlers:
 - url: /api/admin/.*
   script: admin.app
 
-
 - url: /api/.*
   script: tracker.app
-  
-## Endpoints handler: Must be /_ah/spi. Apps send requests to /_ah/api, but these are handled at /_ah/spi!!
-- url: /_ah/spi/.*
-  script: main.APPLICATION
-
-# CRON job for storing
-- url: /report/weekly
-  script: reports.app
-  login: admin
   
 - url: /_ah/queue/deferred
   script: google.appengine.ext.deferred.deferred.application
@@ -37,8 +27,6 @@ libraries:
   version: "2.5.2"
 - name: pycrypto
   version: latest
-- name: endpoints
-  version: 1.0
   
 env_variables:
   TRACKER_ADMIN_USERNAME: 'tracker'
