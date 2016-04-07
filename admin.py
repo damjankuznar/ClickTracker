@@ -134,8 +134,8 @@ class CampaignCollectionHandler(AdminHandler):
         for platform_name in platforms_list:
             platform = Platform(name=platform_name, counter=0, campaign=campaign.key,
                                 id="%d-%s" % (campaign_id, platform_name))
-            platform.put()
             platforms.append(platform)
+        ndb.put_multi_async(platforms)
         # prepare response representation of the created campaign
         output = campaign_to_dict(campaign, platforms=platforms)
         # set the appropriate response headers
@@ -209,7 +209,7 @@ class CampaignHandler(AdminHandler):
         @ndb.transactional(xg=True)
         def _update():
             """Do the update in transaction"""
-            [__platform.put() for __platform in platforms_to_store]
+            ndb.put_multi(platforms_to_store)
             campaign.put()
 
         _update()
@@ -301,3 +301,5 @@ app.error_handlers[405] = handle_error
 app.error_handlers[404] = handle_error
 app.error_handlers[400] = handle_error
 app.error_handlers[500] = handle_error
+
+app = ndb.toplevel(app)

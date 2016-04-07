@@ -1,10 +1,12 @@
 import os
 import time
+
 import webapp2
 from google.appengine.api import memcache, taskqueue
-from google.appengine.api.taskqueue.taskqueue import Task
 from google.appengine.ext import deferred
+from google.appengine.ext import ndb
 from webapp2_extras import routes
+
 from models import Campaign, Platform
 
 PLATFORMS = ("android", "ios", "wp")
@@ -44,14 +46,15 @@ class ClickHandler(webapp2.RedirectHandler):
                                _name="%s-%d" % (platform_id, get_interval_index()))
             except (taskqueue.TaskAlreadyExistsError, taskqueue.TombstonedTaskError), e:
                 pass
+            # TODO: optimize with async operations
             campaign = Campaign.get_by_id(campaign_id)
             return webapp2.redirect(campaign.link.encode("utf8"))
         else:
             return webapp2.redirect("http://outfit7.com", permanent=True)
 
 
-app = webapp2.WSGIApplication([
+app = ndb.toplevel(webapp2.WSGIApplication([
     routes.PathPrefixRoute('/api', [
         webapp2.Route(r'/campaign/<campaign_id>/platform/<platform_name>', ClickHandler),
     ])
-], debug=False)
+], debug=False))
